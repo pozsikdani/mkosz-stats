@@ -1,0 +1,27 @@
+config.py
+  7de5845e4c2a6915 10-13
+mkosz_stats/importers/pbp.py
+  7de5845e4c2a6915 3,64-68,72-75,77-79,84,88-89,92-97,112-114,120,200-203,212-213,224,227,229-232,235,237-240,247,268-355
+CHANGELOG.md
+  7de5845e4c2a6915 1-22
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.1.8",
+  "base_commit_sha": "f2677d54cf749dc37d9ba430b24e5a889a67ecf7",
+  "prompts": {
+    "7de5845e4c2a6915": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c060a9ad-45b6-44aa-a73f-d98e42fa51e5",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Peter Laczko <peter.laczko@railsware.com>",
+      "messages": [],
+      "total_additions": 160,
+      "total_deletions": 41,
+      "accepted_lines": 159,
+      "overriden_lines": 0
+    }
+  }
+}
