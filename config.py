@@ -7,13 +7,10 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 # Unified database
 DB_PATH = os.path.join(BASE_DIR, "mkosz_stats.sqlite")
 
-# Source databases (meglévő projektek)
-SCORESHEET_DB = os.path.expanduser(
-    "~/Desktop/claudecode/mkosz-scoresheet/nb2_full.sqlite"
-)
-PBP_DB = os.path.expanduser(
-    "~/Desktop/claudecode/mkosz-play-by-play/pbp.sqlite"
-)
+# Source databases — sibling repos under the same parent directory
+PARENT_DIR = os.path.dirname(BASE_DIR)
+SCORESHEET_DB = os.path.join(PARENT_DIR, "mkosz-scoresheet", "nb2_full.sqlite")
+PBP_DB = os.path.join(PARENT_DIR, "mkosz-play-by-play", "pbp.sqlite")
 
 # MKOSZ API
 SHOTCHART_API_URL = "https://mkosz.hu/ajax/film.php"
