@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-03-24
+
+### Added
+- `COMP_DATA_SOURCES` dict a `config.py`-ban — bajnokságonként elérhető adatforrások (scoresheet, pbp, shotchart).
+- `README.md` — repó dokumentáció.
+
+### Changed
+- `player_resolver.py` refaktor: scoresheet-bridge helyett PBP↔shotchart bridge NB1B meccsekhez, exact name propagáció más meccsekre.
+
 ## 2026-03-21
 
 ### Fixed
