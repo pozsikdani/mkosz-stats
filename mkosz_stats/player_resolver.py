@@ -1,10 +1,10 @@
 """Játékos azonosítás (reconciliation) engine.
 
-Fázisok:
+Egyszerűsített fázisok (nincs scoresheet↔shotchart bridge, mert nincs overlap):
 1. Shotchart playercode → player regisztráció
-2. Shotchart + scoresheet bridge: name match → license_number ↔ playercode
-3. PBP name → playercode feloldás
-4. Feloldatlan játékosok riport
+2. NB1B PBP ↔ shotchart bridge: azonos meccsen name match → playercode
+3. Exact name propagáció: ismert nevek más meccsekre
+4. Fact table update: playercode kitöltés license_number és name alapján
 """
 
 import sqlite3
@@ -19,11 +19,11 @@ def resolve_players(conn: sqlite3.Connection, report: bool = False):
     # Phase 1: Register players from shotchart data (has playercode)
     _phase1_shotchart_players(conn)
 
-    # Phase 2: Bridge scoresheet (license_number) ↔ shotchart (playercode)
-    _phase2_scoresheet_bridge(conn)
+    # Phase 2: NB1B PBP ↔ shotchart bridge (azonos meccsen name match)
+    _phase2_pbp_shotchart_bridge(conn)
 
-    # Phase 3: Resolve PBP player names
-    _phase3_pbp_names(conn)
+    # Phase 3: Exact name propagáció más meccsekre
+    _phase3_name_propagation(conn)
 
     # Phase 4: Update playercode in fact tables
     _phase4_update_fact_tables(conn)
@@ -65,118 +65,88 @@ def _phase1_shotchart_players(conn: sqlite3.Connection):
     print(f"  Phase 1: {count} játékos regisztrálva shotchart-ból")
 
 
-def _phase2_scoresheet_bridge(conn: sqlite3.Connection):
-    """Bridge: match shots playercode+name with scoresheet license_number+name."""
+def _phase2_pbp_shotchart_bridge(conn: sqlite3.Connection):
+    """NB1B bridge: azonos meccsen PBP player_name ↔ shotchart wbname → playercode.
 
-    # Get all matches that have BOTH scoresheet and shotchart data
+    Csak olyan meccsekre ahol PBP és shotchart is van (NB1B).
+    """
     matches = conn.execute(
-        "SELECT gamecode FROM matches WHERE has_scoresheet = 1 AND has_shotchart = 1"
+        "SELECT gamecode FROM matches WHERE has_pbp = 1 AND has_shotchart = 1"
     ).fetchall()
 
-    links_made = 0
+    resolved = 0
     for m in matches:
         gc = m["gamecode"]
 
-        # Get scoresheet players for this match
-        ss_players = conn.execute(
-            """SELECT DISTINCT player_name, license_number, team
+        # PBP players without playercode
+        pbp_players = conn.execute(
+            """SELECT DISTINCT player_name, team
                FROM player_game_stats
-               WHERE gamecode = ? AND license_number IS NOT NULL
-                 AND source IN ('scoresheet', 'merged')""",
+               WHERE gamecode = ? AND playercode IS NULL AND source = 'pbp'""",
             (gc,),
         ).fetchall()
 
-        # Get shot players for this match
+        # Shotchart players with playercode
         shot_players = conn.execute(
-            """SELECT DISTINCT playercode, player_name, team_id
+            """SELECT DISTINCT playercode, player_name
                FROM shots
                WHERE gamecode = ? AND playercode IS NOT NULL""",
             (gc,),
         ).fetchall()
 
-        # For each scoresheet player, find best shotchart match
-        for ss in ss_players:
+        for pbp in pbp_players:
             best_pc = None
             best_score = 0.0
 
             for sh in shot_players:
-                score = name_similarity(ss["player_name"], sh["player_name"])
+                score = name_similarity(pbp["player_name"], sh["player_name"])
                 if score > best_score and score >= 0.7:
                     best_score = score
                     best_pc = sh["playercode"]
 
-            if best_pc and ss["license_number"]:
-                # Link license_number → playercode
-                existing = conn.execute(
-                    "SELECT license_number FROM players WHERE playercode = ?",
-                    (best_pc,),
-                ).fetchone()
-
-                if existing and not existing["license_number"]:
-                    conn.execute(
-                        "UPDATE players SET license_number = ? WHERE playercode = ?",
-                        (ss["license_number"], best_pc),
-                    )
-                    links_made += 1
-
-                # Register name variant
+            if best_pc:
+                conn.execute(
+                    """UPDATE player_game_stats SET playercode = ?
+                       WHERE gamecode = ? AND team = ? AND player_name = ?""",
+                    (best_pc, gc, pbp["team"], pbp["player_name"]),
+                )
                 conn.execute(
                     """INSERT OR IGNORE INTO player_names
                        (playercode, name_variant, source)
-                       VALUES (?, ?, 'scoresheet')""",
-                    (best_pc, ss["player_name"]),
+                       VALUES (?, ?, 'pbp')""",
+                    (best_pc, pbp["player_name"]),
                 )
+                resolved += 1
 
-    print(f"  Phase 2: {links_made} license_number ↔ playercode link létrehozva")
+    print(f"  Phase 2: {resolved} PBP játékos feloldva (NB1B bridge)")
 
 
-def _phase3_pbp_names(conn: sqlite3.Connection):
-    """Resolve PBP player names to playercodes via name matching."""
+def _phase3_name_propagation(conn: sqlite3.Connection):
+    """Propagate known playercode-name pairs to other matches.
 
-    # Get all PBP players without playercode
-    pbp_players = conn.execute(
-        """SELECT DISTINCT gamecode, player_name, team
-           FROM player_game_stats
-           WHERE playercode IS NULL AND source IN ('pbp', 'merged')"""
-    ).fetchall()
+    Ha egy player_name már ismert a player_names táblából,
+    más meccseken is kitöltjük a playercode-ot.
+    """
+    updated = conn.execute(
+        """UPDATE player_game_stats SET playercode = (
+             SELECT pn.playercode FROM player_names pn
+             WHERE pn.name_variant = player_game_stats.player_name
+             LIMIT 1
+           )
+           WHERE playercode IS NULL
+             AND EXISTS (
+               SELECT 1 FROM player_names pn
+               WHERE pn.name_variant = player_game_stats.player_name
+             )"""
+    ).rowcount
 
-    # Get all known player names
-    known = conn.execute(
-        "SELECT playercode, name_variant FROM player_names"
-    ).fetchall()
-
-    resolved = 0
-    for p in pbp_players:
-        best_pc = None
-        best_score = 0.0
-
-        for k in known:
-            score = name_similarity(p["player_name"], k["name_variant"])
-            if score > best_score and score >= 0.8:
-                best_score = score
-                best_pc = k["playercode"]
-
-        if best_pc:
-            conn.execute(
-                """UPDATE player_game_stats SET playercode = ?
-                   WHERE gamecode = ? AND team = ? AND player_name = ?""",
-                (best_pc, p["gamecode"], p["team"], p["player_name"]),
-            )
-            conn.execute(
-                """INSERT OR IGNORE INTO player_names
-                   (playercode, name_variant, source)
-                   VALUES (?, ?, 'pbp')""",
-                (best_pc, p["player_name"]),
-            )
-            resolved += 1
-
-    print(f"  Phase 3: {resolved} PBP játékos feloldva")
+    print(f"  Phase 3: {updated} player_game_stats sor frissítve (name propagáció)")
 
 
 def _phase4_update_fact_tables(conn: sqlite3.Connection):
-    """Update playercode in player_game_stats using license_number lookups."""
+    """Update playercode via license_number lookups (ha van bridge)."""
 
-    # Update via license_number
+    # Update via license_number (jövőben ha roster scrape kitölti)
     updated = conn.execute(
         """UPDATE player_game_stats SET playercode = (
              SELECT p.playercode FROM players p
@@ -190,21 +160,10 @@ def _phase4_update_fact_tables(conn: sqlite3.Connection):
              )"""
     ).rowcount
 
-    # Update via name match from player_names
-    updated2 = conn.execute(
-        """UPDATE player_game_stats SET playercode = (
-             SELECT pn.playercode FROM player_names pn
-             WHERE pn.name_variant = player_game_stats.player_name
-             LIMIT 1
-           )
-           WHERE playercode IS NULL
-             AND EXISTS (
-               SELECT 1 FROM player_names pn
-               WHERE pn.name_variant = player_game_stats.player_name
-             )"""
-    ).rowcount
-
-    print(f"  Phase 4: {updated + updated2} player_game_stats sor frissítve playercode-dal")
+    if updated:
+        print(f"  Phase 4: {updated} sor frissítve license_number alapján")
+    else:
+        print(f"  Phase 4: 0 sor (nincs license_number↔playercode link még)")
 
 
 def _print_summary(conn: sqlite3.Connection, report: bool):
@@ -223,25 +182,37 @@ def _print_summary(conn: sqlite3.Connection, report: bool):
 
     print(f"\n--- Összegzés ---")
     print(f"  Regisztrált játékosok: {total_players}")
-    print(f"  License number-rel:    {with_license}")
-    print(
-        f"  Player stats feloldva: {resolved_pgs}/{total_pgs} "
-        f"({resolved_pgs/total_pgs*100:.0f}%)" if total_pgs else ""
-    )
+    if with_license:
+        print(f"  License number-rel:    {with_license}")
+    if total_pgs:
+        print(
+            f"  Player stats feloldva: {resolved_pgs}/{total_pgs} "
+            f"({resolved_pgs/total_pgs*100:.0f}%)"
+        )
 
     if report:
+        # Only show PBP/shotchart unresolved (scoresheet players won't have playercode)
         unresolved = conn.execute(
             """SELECT DISTINCT player_name, gamecode, team, source
                FROM player_game_stats
-               WHERE playercode IS NULL
+               WHERE playercode IS NULL AND source IN ('pbp', 'merged')
                ORDER BY player_name"""
         ).fetchall()
 
         if unresolved:
-            print(f"\n⚠️  Feloldatlan játékosok ({len(unresolved)} sor):")
+            print(f"\n⚠️  Feloldatlan PBP játékosok ({len(unresolved)} sor):")
             seen = set()
             for r in unresolved:
                 name = r["player_name"]
                 if name not in seen:
                     print(f"    {name} ({r['source']}, {r['gamecode']})")
                     seen.add(name)
+        else:
+            print(f"\n✅ Minden PBP játékos feloldva!")
+
+        # Scoresheet coverage (ezeknek nincs playercode, de van license_number)
+        ss_total = conn.execute(
+            "SELECT COUNT(DISTINCT player_name) FROM player_game_stats WHERE source = 'scoresheet'"
+        ).fetchone()[0]
+        if ss_total:
+            print(f"\n📋 Scoresheet játékosok: {ss_total} (license_number alapú, nincs playercode)")

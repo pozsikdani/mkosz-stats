@@ -49,3 +49,23 @@ SCORESHEET_PREFIX_TO_COMP = {
     "F2KE": "hun3k",
     "F2NY": "hun3n",
 }
+
+# Melyik bajnoksághoz milyen adatforrás elérhető
+COMP_DATA_SOURCES = {
+    # NB2 + Budapest: scoresheet only
+    "hun3k": ["scoresheet"],
+    "hun3kob": ["scoresheet"],
+    "hun3koa": ["scoresheet"],
+    "hun3ki": ["scoresheet"],
+    "hun3n": ["scoresheet"],
+    "whun_bud_na": ["scoresheet"],
+    "hun_bud_rkfb": ["scoresheet"],
+    # NB1B: PBP + shotchart (nincs scoresheet)
+    "hun2a": ["pbp", "shotchart"],
+    "hun2b": ["pbp", "shotchart"],
+    # MEFOB: PBP only
+    "whun_univn": ["pbp"],
+    "hun_univn": ["pbp"],
+    # Női NB1: shotchart only (egyelőre)
+    "whun": ["shotchart"],
+}
