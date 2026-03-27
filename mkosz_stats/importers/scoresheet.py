@@ -1,4 +1,4 @@
-"""Scoresheet import: nb2_full.sqlite → unified DB."""
+"""Scoresheet import: scoresheet.sqlite → unified DB."""
 
 import sqlite3
 from ..normalize import extract_gamecode_from_pdf, split_gamecode
