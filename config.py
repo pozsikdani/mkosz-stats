@@ -9,7 +9,7 @@ DB_PATH = os.path.join(BASE_DIR, "mkosz_stats.sqlite")
 
 # Source databases — sibling repos under the same parent directory
 PARENT_DIR = os.path.dirname(BASE_DIR)
-SCORESHEET_DB = os.path.join(PARENT_DIR, "mkosz-scoresheet", "nb2_full.sqlite")
+SCORESHEET_DB = os.path.join(PARENT_DIR, "mkosz-scoresheet", "scoresheet.sqlite")
 PBP_DB = os.path.join(PARENT_DIR, "mkosz-play-by-play", "pbp.sqlite")
 
 # MKOSZ API
