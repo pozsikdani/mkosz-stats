@@ -21,6 +21,10 @@ PLAYER_PAGE_URL_TPL = (
     "https://mkosz.hu/jatekos/{season}/{comp}/{playercode}/{slug}"
 )
 
+# Web scraping URLs
+STANDINGS_URL_TPL = "https://mkosz.hu/bajnoksag/{season}/{comp}"
+ROSTER_URL_TPL = "https://mkosz.hu/csapat/{season}/{comp}/0/{slug}"
+
 # Rate limiting
 API_DELAY = 0.25  # seconds between API calls
 

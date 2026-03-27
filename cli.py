@@ -40,6 +40,11 @@ def cmd_import(args):
             sys.exit(1)
         import_pbp(conn, src)
 
+    elif args.source == "web":
+        from mkosz_stats.importers.web import import_web
+
+        import_web(conn, comp=args.comp, season=args.season or "x2526")
+
     elif args.source == "shotchart":
         from mkosz_stats.importers.shotchart import import_shotchart
 
@@ -149,7 +154,7 @@ def main():
     # import
     p_import = sub.add_parser("import", help="Adat importálás")
     p_import.add_argument(
-        "source", choices=["scoresheet", "pbp", "shotchart"], help="Forrás típus"
+        "source", choices=["scoresheet", "pbp", "shotchart", "web"], help="Forrás típus"
     )
     p_import.add_argument("path", nargs="?", help="Forrás DB útvonal")
     p_import.add_argument("--season", default="x2526")

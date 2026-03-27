@@ -233,6 +233,55 @@ CREATE TABLE IF NOT EXISTS quarter_scores (
 );
 
 -- ============================================================
+-- WEB-SCRAPED DATA
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS standings (
+    comp_code        TEXT NOT NULL,
+    season           TEXT NOT NULL,
+    team_name        TEXT NOT NULL,
+    rank             INTEGER,
+    games_played     INTEGER,
+    wins             INTEGER,
+    losses           INTEGER,
+    home_record      TEXT,
+    away_record      TEXT,
+    streak           TEXT,
+    last_five        TEXT,
+    team_page_url    TEXT,
+    team_id          INTEGER,
+    scraped_at       TEXT DEFAULT (datetime('now')),
+    PRIMARY KEY (comp_code, season, team_name)
+);
+
+CREATE TABLE IF NOT EXISTS player_roster_meta (
+    comp_code        TEXT NOT NULL,
+    season           TEXT NOT NULL,
+    team_name        TEXT NOT NULL,
+    player_name      TEXT NOT NULL,
+    jersey_number    TEXT,
+    position         TEXT,
+    height_cm        INTEGER,
+    photo_url        TEXT,
+    birth_year       TEXT,
+    scraped_at       TEXT DEFAULT (datetime('now')),
+    PRIMARY KEY (comp_code, season, team_name, player_name)
+);
+
+CREATE TABLE IF NOT EXISTS web_match_results (
+    comp_code        TEXT NOT NULL,
+    season           TEXT NOT NULL,
+    match_date       TEXT,
+    home_team        TEXT NOT NULL,
+    away_team        TEXT NOT NULL,
+    home_score       INTEGER,
+    away_score       INTEGER,
+    team_id          INTEGER,
+    scraped_at       TEXT DEFAULT (datetime('now')),
+    PRIMARY KEY (comp_code, season, match_date, home_team, away_team)
+);
+
+-- ============================================================
 -- INDEXES
 -- ============================================================
 
@@ -296,6 +345,7 @@ def db_status(conn: sqlite3.Connection) -> dict:
         "player_game_stats", "shots", "pbp_events", "scoring_events",
         "substitutions", "timeouts", "personal_fouls", "rosters",
         "player_names", "team_aliases", "quarter_scores",
+        "standings", "player_roster_meta", "web_match_results",
     ]
     counts = {}
     for t in tables:
