@@ -1,0 +1,29 @@
+mkosz_stats/db.py
+  cc1e7e1eff2b82b9 236-283,348
+config.py
+  cc1e7e1eff2b82b9 24-27
+mkosz_stats/importers/web.py
+  cc1e7e1eff2b82b9 1-310
+cli.py
+  cc1e7e1eff2b82b9 43-47,157
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.1.8",
+  "base_commit_sha": "04492fd0ebe3f31f2b439c2e40005477b91593de",
+  "prompts": {
+    "cc1e7e1eff2b82b9": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "85d12401-fbc2-4b2a-b6f0-5ec8a5ce3610",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Peter Laczko <peter.laczko@railsware.com>",
+      "messages": [],
+      "total_additions": 370,
+      "total_deletions": 1,
+      "accepted_lines": 370,
+      "overriden_lines": 0
+    }
+  }
+}
