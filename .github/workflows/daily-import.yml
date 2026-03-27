@@ -1,0 +1,49 @@
+name: Napi import
+
+on:
+  schedule:
+    - cron: '10 6 * * *'  # 6:10 UTC — after scoresheet CI (6:00), before dashboard CI (6:17)
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  import:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Python csomagok telepítése
+        run: pip install requests beautifulsoup4
+
+      - name: Scoresheet repo klónozása
+        run: git clone --depth 1 https://github.com/pozsikdani/mkosz-scoresheet.git /tmp/mkosz-scoresheet
+
+      - name: PBP repo klónozása
+        run: git clone --depth 1 https://github.com/pozsikdani/mkosz-play-by-play.git /tmp/mkosz-pbp
+
+      - name: Scoresheet import
+        run: python3 cli.py import scoresheet /tmp/mkosz-scoresheet/scoresheet.sqlite
+
+      - name: PBP import
+        run: python3 cli.py import pbp /tmp/mkosz-pbp/pbp.sqlite
+
+      - name: Web import (standings + rosters)
+        run: python3 cli.py import web
+
+      - name: Commit és push ha változott
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add mkosz_stats.sqlite
+          git diff --staged --quiet || (
+            git commit -m "Napi import (auto): $(date +%Y-%m-%d)" &&
+            git push
+          )
