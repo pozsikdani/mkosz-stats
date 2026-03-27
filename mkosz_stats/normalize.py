@@ -70,9 +70,13 @@ def extract_gamecode_from_pdf(source_pdf: str) -> Optional[str]:
 
     'hun3k_125483.pdf' → 'hun3k_125483'
     'whun_bud_na_92.pdf' → 'whun_bud_na_92'
+    'https://mkosz.hu/.../whun_univn_127979' → 'whun_univn_127979'
     """
     if not source_pdf:
         return None
+    # Handle URLs (PBP-converted entries store source_url, not PDF filename)
+    if source_pdf.startswith("http"):
+        return source_pdf.rstrip("/").rsplit("/", 1)[-1]
     return source_pdf.replace(".pdf", "").strip()
 
 
