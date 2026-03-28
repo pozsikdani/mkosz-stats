@@ -72,11 +72,12 @@ def import_pbp(conn: sqlite3.Connection, src_path: str):
     for pr in player_rows:
         gamecode = pr["match_id"]
         team = pr["team"]
-        player_name = pr["player_name"]
+        player_name_raw = pr["player_name"]
+        player_name = player_name_raw.upper()
 
-        basic = _aggregate_basic_stats(src, gamecode, team, player_name)
-        is_starter = _is_starter(src, gamecode, team, player_name)
-        minutes = _get_player_minutes(src, gamecode, team, player_name, is_starter)
+        basic = _aggregate_basic_stats(src, gamecode, team, player_name_raw)
+        is_starter = _is_starter(src, gamecode, team, player_name_raw)
+        minutes = _get_player_minutes(src, gamecode, team, player_name_raw, is_starter)
 
         conn.execute(
             """INSERT INTO player_game_stats
@@ -141,7 +142,7 @@ def import_pbp(conn: sqlite3.Connection, src_path: str):
                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 e["match_id"], e["event_seq"], e["quarter"], e["minute"],
-                e["team"], e["player_name"], e["event_type"], e["event_raw"],
+                e["team"], e["player_name"].upper() if e["player_name"] else None, e["event_type"], e["event_raw"],
                 e["counter"], e["score_a"], e["score_b"],
                 e["is_scoring"], e["points"],
             ),
@@ -165,7 +166,7 @@ def import_pbp(conn: sqlite3.Connection, src_path: str):
                VALUES (?, ?, ?, ?, ?, ?, ?)""",
             (
                 s["match_id"], s["event_seq"], s["quarter"], s["minute"],
-                s["team"], s["player_in"], s["player_out"],
+                s["team"], s["player_in"].upper(), s["player_out"].upper(),
             ),
         )
         sub_count += 1
