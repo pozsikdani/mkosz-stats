@@ -172,6 +172,42 @@ def import_pbp(conn: sqlite3.Connection, src_path: str):
 
     print(f"  ✅ {stats_count} player_game_stats sor importálva (PBP)")
 
+    # ── 2b. Propagate license_number from scoresheet to PBP rows ────
+    scoresheet_ids = conn.execute(
+        "SELECT DISTINCT player_name, license_number FROM player_game_stats "
+        "WHERE source = 'scoresheet' AND license_number IS NOT NULL"
+    ).fetchall()
+
+    # Exact name match (fast)
+    exact_count = 0
+    for ss_name, lic in scoresheet_ids:
+        updated = conn.execute(
+            "UPDATE player_game_stats SET license_number = ? "
+            "WHERE license_number IS NULL AND player_name = ?",
+            (lic, ss_name),
+        ).rowcount
+        exact_count += updated
+
+    # Fuzzy match for encoding differences (GER?CS vs GERŐCS)
+    fuzzy_count = 0
+    pbp_nulls = conn.execute(
+        "SELECT DISTINCT player_name FROM player_game_stats WHERE license_number IS NULL"
+    ).fetchall()
+    for (pbp_name,) in pbp_nulls:
+        for ss_name, lic in scoresheet_ids:
+            if _names_match(pbp_name, ss_name):
+                updated = conn.execute(
+                    "UPDATE player_game_stats SET license_number = ? "
+                    "WHERE license_number IS NULL AND player_name = ?",
+                    (lic, pbp_name),
+                ).rowcount
+                fuzzy_count += updated
+                break
+
+    conn.commit()
+    if exact_count or fuzzy_count:
+        print(f"  ✅ license_number propagálva: {exact_count} exact + {fuzzy_count} fuzzy")
+
     # ── 3. Import events → pbp_events ──────────────────────────────
     events = src.execute(
         "SELECT match_id, event_seq, quarter, minute, team, "
