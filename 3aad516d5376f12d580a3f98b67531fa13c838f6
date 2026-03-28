@@ -1,0 +1,23 @@
+mkosz_stats/importers/pbp.py
+  cc1e7e1eff2b82b9 175-210
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.1.8",
+  "base_commit_sha": "3aad516d5376f12d580a3f98b67531fa13c838f6",
+  "prompts": {
+    "cc1e7e1eff2b82b9": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "85d12401-fbc2-4b2a-b6f0-5ec8a5ce3610",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Peter Laczko <peter.laczko@railsware.com>",
+      "messages": [],
+      "total_additions": 36,
+      "total_deletions": 0,
+      "accepted_lines": 36,
+      "overriden_lines": 0
+    }
+  }
+}
