@@ -2,8 +2,45 @@
 
 import json
 import sqlite3
+import unicodedata
 from ..team_resolver import ensure_competition, ensure_season
 from config import COMPETITIONS
+
+
+def _normalize_for_match(name):
+    """Strip accents and encoding artifacts to ASCII for name comparison."""
+    for src, dst in [("Ő", "O"), ("Ű", "U"), ("ő", "o"), ("ű", "u"),
+                     ("Õ", "O"), ("õ", "o"), ("Û", "U"), ("û", "u")]:
+        name = name.replace(src, dst)
+    # Replace ? with O (encoding artifact — usually ő→O, occasionally ű→U, but O works for matching)
+    name = name.replace("?", "O")
+    nfkd = unicodedata.normalize("NFKD", name)
+    return "".join(c for c in nfkd if not unicodedata.combining(c)).upper()
+
+
+def _names_match(name_a, name_b):
+    """Check if two player names refer to the same person.
+
+    Handles: encoding artifacts (?/õ/û), accent differences, name truncation.
+    Compares word-by-word: all words in the shorter name must appear as prefixes
+    in the longer name's words.
+    """
+    na = _normalize_for_match(name_a).split()
+    nb = _normalize_for_match(name_b).split()
+    if not na or not nb:
+        return False
+    # Family name (first word) must match — allow prefix match for encoding artifacts
+    # e.g. GERCS (from GER?CS) should match GEROCS (from GERŐCS)
+    if not (na[0].startswith(nb[0]) or nb[0].startswith(na[0])):
+        return False
+    # The shorter set of given names must all appear as prefixes in the longer set
+    short, long = (na[1:], nb[1:]) if len(na) <= len(nb) else (nb[1:], na[1:])
+    if not short:
+        return True  # Only family name — match
+    for sw in short:
+        if not any(lw.startswith(sw) or sw.startswith(lw) for lw in long):
+            return False
+    return True
 
 
 def import_pbp(conn: sqlite3.Connection, src_path: str):
@@ -75,15 +112,15 @@ def import_pbp(conn: sqlite3.Connection, src_path: str):
         player_name_raw = pr["player_name"]
         player_name = player_name_raw.upper()
 
-        # Match to scoresheet name if possible (handles truncated names in PDFs)
-        scoresheet_match = conn.execute(
-            """SELECT player_name FROM player_game_stats
-               WHERE gamecode = ? AND team = ? AND source = 'scoresheet'
-               AND (player_name LIKE '%' || ? || '%' OR ? LIKE '%' || player_name || '%')""",
-            (gamecode, team, player_name, player_name),
-        ).fetchone()
-        if scoresheet_match:
-            player_name = scoresheet_match[0]
+        # Match to scoresheet name if possible (handles truncated names + encoding artifacts)
+        scoresheet_rows = conn.execute(
+            "SELECT player_name FROM player_game_stats WHERE gamecode=? AND team=? AND source='scoresheet'",
+            (gamecode, team),
+        ).fetchall()
+        for sr in scoresheet_rows:
+            if _names_match(player_name, sr[0]):
+                player_name = sr[0]
+                break
 
         basic = _aggregate_basic_stats(src, gamecode, team, player_name_raw)
         is_starter = _is_starter(src, gamecode, team, player_name_raw)
