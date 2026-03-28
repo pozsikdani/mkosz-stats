@@ -2,7 +2,7 @@ name: Napi import
 
 on:
   schedule:
-    - cron: '10 6 * * *'  # 6:10 UTC — after scoresheet CI (6:00), before dashboard CI (6:17)
+    - cron: '30 6 * * *'  # 6:30 UTC — after scoresheet + PBP CIs (6:00)
   workflow_dispatch: {}
 
 permissions:

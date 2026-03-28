@@ -54,8 +54,6 @@ SCORESHEET_PREFIX_TO_COMP = {
     "F2NY": "hun3n",
     "NA": "whun_bud_na",
     "RKFB": "hun_bud_rkfb",
-    "MFOB": "whun_univn",
-    "MFOF": "hun_univn",
 }
 
 # Melyik bajnoksághoz milyen adatforrás elérhető
