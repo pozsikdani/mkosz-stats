@@ -75,6 +75,16 @@ def import_pbp(conn: sqlite3.Connection, src_path: str):
         player_name_raw = pr["player_name"]
         player_name = player_name_raw.upper()
 
+        # Match to scoresheet name if possible (handles truncated names in PDFs)
+        scoresheet_match = conn.execute(
+            """SELECT player_name FROM player_game_stats
+               WHERE gamecode = ? AND team = ? AND source = 'scoresheet'
+               AND (player_name LIKE '%' || ? || '%' OR ? LIKE '%' || player_name || '%')""",
+            (gamecode, team, player_name, player_name),
+        ).fetchone()
+        if scoresheet_match:
+            player_name = scoresheet_match[0]
+
         basic = _aggregate_basic_stats(src, gamecode, team, player_name_raw)
         is_starter = _is_starter(src, gamecode, team, player_name_raw)
         minutes = _get_player_minutes(src, gamecode, team, player_name_raw, is_starter)
