@@ -1,0 +1,23 @@
+config.py
+  cc1e7e1eff2b82b9 57-62
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.1.8",
+  "base_commit_sha": "8dc8eec45c6c69a9794eb0ad5589648f329bac60",
+  "prompts": {
+    "cc1e7e1eff2b82b9": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "85d12401-fbc2-4b2a-b6f0-5ec8a5ce3610",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Peter Laczko <peter.laczko@railsware.com>",
+      "messages": [],
+      "total_additions": 6,
+      "total_deletions": 0,
+      "accepted_lines": 6,
+      "overriden_lines": 0
+    }
+  }
+}
