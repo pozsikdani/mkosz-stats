@@ -82,6 +82,8 @@ def import_pbp(conn: sqlite3.Connection, src_path: str):
                  match_date = COALESCE(excluded.match_date, matches.match_date),
                  match_time = COALESCE(excluded.match_time, matches.match_time),
                  venue = COALESCE(excluded.venue, matches.venue),
+                 score_a = CASE WHEN excluded.score_a > 0 THEN excluded.score_a ELSE matches.score_a END,
+                 score_b = CASE WHEN excluded.score_b > 0 THEN excluded.score_b ELSE matches.score_b END,
                  quarter_scores = COALESCE(excluded.quarter_scores, matches.quarter_scores),
                  referees = COALESCE(excluded.referees, matches.referees),
                  has_pbp = 1""",
