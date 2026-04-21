@@ -38,6 +38,7 @@ COMPETITIONS = {
     "hun3koa": ("NB2 Közép A", "nb2", "M"),
     "hun3ki": ("NB2 Kiemelt", "nb2", "M"),
     "hun3n": ("NB2 Nyugat", "nb2", "M"),
+    "hun3_plya": ("NB2 Alsóházi Rájátszás", "nb2_playoff", "M"),
     "whun": ("Női NB1 A", "nb1", "F"),
     "whun_univn": ("MEFOB Női", "university", "F"),
     "hun_univn": ("MEFOB Férfi", "university", "M"),
@@ -70,6 +71,7 @@ COMP_DATA_SOURCES = {
     "hun3koa": ["scoresheet"],
     "hun3ki": ["scoresheet"],
     "hun3n": ["scoresheet"],
+    "hun3_plya": ["scoresheet"],
     "whun_bud_na": ["scoresheet"],
     "hun_bud_rkfb": ["scoresheet"],
     # NB1B: PBP + shotchart (nincs scoresheet)
