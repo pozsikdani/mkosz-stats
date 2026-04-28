@@ -38,10 +38,28 @@ jobs:
       - name: Web import (standings + rosters)
         run: python3 cli.py import web
 
-      - name: VACUUM — csökkentsük a DB méretét (GitHub 100MB limit)
+      - name: Indexek levétele + VACUUM (GitHub 100MB limit alatt maradás)
         run: |
           BEFORE=$(stat -c%s mkosz_stats.sqlite)
-          sqlite3 mkosz_stats.sqlite "VACUUM"
+          # Custom indexek ~21 MB-ot tesznek ki. A consumer (scout-web)
+          # klónozás után újraépíti őket — lásd mkosz-scout-web/.github/workflows/daily-update.yml.
+          sqlite3 mkosz_stats.sqlite <<'SQL'
+          DROP INDEX IF EXISTS idx_matches_comp;
+          DROP INDEX IF EXISTS idx_matches_date;
+          DROP INDEX IF EXISTS idx_pbp_gamecode;
+          DROP INDEX IF EXISTS idx_pbp_playercode;
+          DROP INDEX IF EXISTS idx_pf_gamecode;
+          DROP INDEX IF EXISTS idx_pgs_gamecode;
+          DROP INDEX IF EXISTS idx_pgs_playercode;
+          DROP INDEX IF EXISTS idx_player_names_variant;
+          DROP INDEX IF EXISTS idx_rosters_team;
+          DROP INDEX IF EXISTS idx_se_gamecode;
+          DROP INDEX IF EXISTS idx_shots_gamecode;
+          DROP INDEX IF EXISTS idx_shots_playercode;
+          DROP INDEX IF EXISTS idx_subs_gamecode;
+          DROP INDEX IF EXISTS idx_team_aliases_team;
+          VACUUM;
+          SQL
           AFTER=$(stat -c%s mkosz_stats.sqlite)
           echo "DB size: $(echo "scale=1; $BEFORE/1048576" | bc) MB → $(echo "scale=1; $AFTER/1048576" | bc) MB"
 
