@@ -38,6 +38,11 @@ jobs:
       - name: Web import (standings + rosters)
         run: python3 cli.py import web
 
+      - name: Shotchart import (mkosz.hu/ajax/film.php)
+        # API néha ConnectTimeout-tal hibázik — ne álljon le miatta a pipeline.
+        continue-on-error: true
+        run: python3 cli.py import shotchart --all
+
       - name: Indexek levétele + VACUUM (GitHub 100MB limit alatt maradás)
         run: |
           BEFORE=$(stat -c%s mkosz_stats.sqlite)
