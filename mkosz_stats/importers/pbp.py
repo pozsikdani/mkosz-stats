@@ -237,6 +237,9 @@ def import_pbp(conn: sqlite3.Connection, src_path: str):
     print(f"  ✅ {ev_count} pbp_events sor importálva")
 
     # ── 4. Import substitutions ────────────────────────────────────
+    # Wholesale re-import: source PBP DB is the source of truth. Without DELETE
+    # the plain INSERT below appended every day → 19× row duplication.
+    conn.execute("DELETE FROM substitutions")
     subs = src.execute(
         "SELECT match_id, event_seq, quarter, minute, team, "
         "player_in, player_out FROM substitutions"
@@ -259,6 +262,9 @@ def import_pbp(conn: sqlite3.Connection, src_path: str):
     print(f"  ✅ {sub_count} substitution importálva")
 
     # ── 5. Import timeouts ─────────────────────────────────────────
+    # Wholesale re-import (source PBP DB is source of truth) — without DELETE
+    # the plain INSERT below appended every day → ~17× duplication.
+    conn.execute("DELETE FROM timeouts WHERE source='pbp'")
     tos = src.execute(
         "SELECT match_id, event_seq, quarter, minute, team FROM timeouts"
     ).fetchall()

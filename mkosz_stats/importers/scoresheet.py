@@ -160,6 +160,9 @@ def import_scoresheet(conn: sqlite3.Connection, src_path: str, season: str = "x2
     print(f"  ✅ {qs_count} quarter_scores sor importálva")
 
     # ── 5. Import timeouts ─────────────────────────────────────────
+    # Wholesale re-import (source scoresheet DB is source of truth) — without
+    # DELETE the plain INSERT below appended every day.
+    conn.execute("DELETE FROM timeouts WHERE source='scoresheet'")
     to = src.execute(
         "SELECT match_id, team, quarter, minute FROM timeouts"
     ).fetchall()
@@ -179,6 +182,9 @@ def import_scoresheet(conn: sqlite3.Connection, src_path: str, season: str = "x2
     print(f"  ✅ {to_count} timeout importálva")
 
     # ── 6. Import personal_fouls ───────────────────────────────────
+    # Wholesale re-import — without DELETE the plain INSERT below appended
+    # every day → ~20× row duplication (24 MB hely-pazarlás).
+    conn.execute("DELETE FROM personal_fouls")
     pf = src.execute(
         "SELECT match_id, team, jersey_number, foul_number, minute, "
         "quarter, foul_type, foul_category, free_throws, offsetting "
