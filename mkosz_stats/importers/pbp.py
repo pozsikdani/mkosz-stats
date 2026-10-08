@@ -78,6 +78,12 @@ def import_pbp(conn: sqlite3.Connection, src_path: str):
                 has_pbp)
                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
                ON CONFLICT(gamecode) DO UPDATE SET
+                 -- season + comp_code: PBP source is authoritative. mkosz.hu
+                 -- serves the same page under any season URL, so corrupted
+                 -- rows (gamecode written with wrong season from a prior CI
+                 -- run) must self-heal when the correct-season import arrives.
+                 comp_code = excluded.comp_code,
+                 season = excluded.season,
                  round_name = COALESCE(excluded.round_name, matches.round_name),
                  match_date = COALESCE(excluded.match_date, matches.match_date),
                  match_time = COALESCE(excluded.match_time, matches.match_time),
