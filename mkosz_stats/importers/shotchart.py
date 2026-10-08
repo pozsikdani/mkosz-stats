@@ -119,12 +119,15 @@ def import_shotchart(
     - all_matches=True: fetch for all matches in DB
     - comp + team_id: fetch all matches for a specific team
     """
+    # Per-gamecode season lookup: the shotchart API URL is season-sensitive,
+    # so hardcoded `season` default would miss any match not in that season.
+    gc_season_map: dict[str, str] = {}
     if all_matches:
-        gamecodes = [
-            r[0] for r in conn.execute(
-                "SELECT gamecode FROM matches WHERE has_shotchart = 0"
-            ).fetchall()
-        ]
+        rows = conn.execute(
+            "SELECT gamecode, season FROM matches WHERE has_shotchart = 0"
+        ).fetchall()
+        gamecodes = [r[0] for r in rows]
+        gc_season_map = {r[0]: r[1] for r in rows}
         print(f"  {len(gamecodes)} meccs shotchart nélkül az adatbázisban")
     elif comp and team_id:
         print(f"  Csapat program lekérése: {team_id} ({comp}, {season})...")
@@ -139,7 +142,7 @@ def import_shotchart(
 
     for i, gc in enumerate(gamecodes):
         gc_comp, _ = gc.rsplit("_", 1) if "_" in gc else (comp or gc, "")
-        gc_season = season
+        gc_season = gc_season_map.get(gc, season)
 
         # Check if already imported
         existing = conn.execute(
