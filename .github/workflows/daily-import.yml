@@ -11,7 +11,7 @@ permissions:
 jobs:
   import:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 45  # shotchart API lassú (per-meccs ~1-2s + retry delay); x2627 kezdő backfill 15+ percet is kérhet
 
     steps:
       - uses: actions/checkout@v4
