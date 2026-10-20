@@ -9,6 +9,9 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from config import DB_PATH, SCORESHEET_DB, PBP_DB
 from mkosz_stats.db import init_db, get_connection, db_status
+from mkosz_stats.normalize import current_season, season_for_date
+from mkosz_stats.team_resolver import ensure_competition
+from config import COMPETITIONS
 
 
 def cmd_init(args):
@@ -29,7 +32,8 @@ def cmd_import(args):
         if not os.path.exists(src):
             print(f"HIBA: Forrás DB nem található: {src}")
             sys.exit(1)
-        import_scoresheet(conn, src, season=args.season or "x2526")
+        # A szezon meccsenként a dátumból jön; --season csak dátum nélküli meccshez.
+        import_scoresheet(conn, src, season=args.season)
 
     elif args.source == "pbp":
         from mkosz_stats.importers.pbp import import_pbp
@@ -43,7 +47,7 @@ def cmd_import(args):
     elif args.source == "web":
         from mkosz_stats.importers.web import import_web
 
-        import_web(conn, comp=args.comp, season=args.season or "x2526")
+        import_web(conn, comp=args.comp, season=args.season or current_season())
 
     elif args.source == "shotchart":
         from mkosz_stats.importers.shotchart import import_shotchart
@@ -54,13 +58,62 @@ def cmd_import(args):
             import_shotchart(
                 conn,
                 comp=args.comp,
-                season=args.season or "x2526",
+                season=args.season or current_season(),
                 team_id=args.team,
             )
         else:
             print("HIBA: --all vagy --comp + --team szükséges")
             sys.exit(1)
 
+    conn.close()
+
+
+def cmd_fix_seasons(args):
+    """A meccsek szezoncímkéjének javítása a dátumuk alapján.
+
+    2026 őszén a napi import --season nélkül futott, így az alapértelmezett
+    "x2526" került az új meccsekre is: a hun3k és a huna_cup idei meccsei a
+    tavalyi szezonba kerültek, és emiatt a kozgazkosar.hu dashboardja üresen
+    maradt. Az importáló már a dátumból számol (season_for_date); ez a parancs
+    a korábban beírt sorokat hozza helyre. Futtatható többször.
+    """
+    db = args.db or DB_PATH
+    conn = get_connection(db)
+
+    rows = conn.execute(
+        "SELECT gamecode, comp_code, season, match_date FROM matches WHERE match_date IS NOT NULL"
+    ).fetchall()
+    wrong = []
+    for gamecode, comp_code, season, match_date in rows:
+        want = season_for_date(match_date)
+        if want and want != season:
+            wrong.append((gamecode, comp_code, season, want, match_date))
+
+    if not wrong:
+        print("Minden meccs szezoncímkéje stimmel.")
+        conn.close()
+        return
+
+    by_change = {}
+    for _, comp_code, season, want, _ in wrong:
+        by_change.setdefault((comp_code, season, want), 0)
+        by_change[(comp_code, season, want)] += 1
+    print(f"{len(wrong)} meccs szezoncímkéje hibás:")
+    for (comp_code, season, want), count in sorted(by_change.items()):
+        print(f"  {comp_code:<14} {season} → {want}   {count} meccs")
+
+    if not args.apply:
+        print("\nSzárazon futott. A javításhoz: cli.py fix-seasons --apply")
+        conn.close()
+        return
+
+    for gamecode, comp_code, _, want, _ in wrong:
+        # A versenynek léteznie kell az új szezonban is (competitions kulcsa
+        # comp_code + season), mielőtt a meccs átkerül.
+        ensure_competition(conn, comp_code, want, *(COMPETITIONS.get(comp_code) or ()))
+        conn.execute("UPDATE matches SET season = ? WHERE gamecode = ?", (want, gamecode))
+    conn.commit()
+    print(f"\n✅ {len(wrong)} meccs javítva.")
     conn.close()
 
 
@@ -157,7 +210,9 @@ def main():
         "source", choices=["scoresheet", "pbp", "shotchart", "web"], help="Forrás típus"
     )
     p_import.add_argument("path", nargs="?", help="Forrás DB útvonal")
-    p_import.add_argument("--season", default="x2526")
+    # Nincs alapértelmezés: a scoresheet importnál a meccs dátuma dönt, a
+    # többinél a mai nap szerinti szezon (current_season).
+    p_import.add_argument("--season", default=None)
     p_import.add_argument("--comp", help="Bajnokság kód (shotchart-hoz)")
     p_import.add_argument("--team", help="Team ID (shotchart-hoz)")
     p_import.add_argument(
@@ -166,6 +221,9 @@ def main():
     )
 
     # resolve
+    p_fix = sub.add_parser("fix-seasons", help="Meccsek szezoncímkéje a dátum alapján")
+    p_fix.add_argument("--apply", action="store_true", help="Tényleg írja is (enélkül szárazon fut)")
+
     p_resolve = sub.add_parser("resolve", help="Játékos azonosítás")
     p_resolve.add_argument(
         "--report", action="store_true", help="Feloldatlan játékosok listázása"
@@ -184,6 +242,8 @@ def main():
         cmd_init(args)
     elif args.command == "import":
         cmd_import(args)
+    elif args.command == "fix-seasons":
+        cmd_fix_seasons(args)
     elif args.command == "resolve":
         cmd_resolve(args)
     elif args.command == "status":
