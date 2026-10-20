@@ -1,17 +1,23 @@
 """Scoresheet import: scoresheet.sqlite → unified DB."""
 
 import sqlite3
-from ..normalize import extract_gamecode_from_pdf, split_gamecode
+from ..normalize import extract_gamecode_from_pdf, season_for_date, split_gamecode
 from ..team_resolver import ensure_competition, ensure_season
 from config import SCORESHEET_PREFIX_TO_COMP, COMPETITIONS
 
 
-def import_scoresheet(conn: sqlite3.Connection, src_path: str, season: str = "x2526"):
-    """Import all data from scoresheet SQLite database."""
+def import_scoresheet(conn: sqlite3.Connection, src_path: str, season: str = None):
+    """Import all data from scoresheet SQLite database.
+
+    A szezon meccsenként a dátumából jön (season_for_date); a `season` csak
+    tartalék, ha egy meccshez nincs dátum. Így egy szezonváltás nem igényel
+    kódmódosítást, és egy régi PDF utólagos betöltése sem csúszik a mai
+    szezonba.
+    """
     src = sqlite3.connect(src_path)
     src.row_factory = sqlite3.Row
 
-    ensure_season(conn, season)
+    seasons_seen = set()
 
     # ── 1. Import matches ──────────────────────────────────────────
     matches = src.execute(
@@ -31,12 +37,20 @@ def import_scoresheet(conn: sqlite3.Connection, src_path: str, season: str = "x2
         comp_code, game_id = split_gamecode(gamecode)
         gamecode_map[m["match_id"]] = gamecode
 
+        match_season = season_for_date(m["match_date"]) or season
+        if not match_season:
+            print(f"  ⚠️  Nincs dátum és nincs --season: {gamecode} kihagyva")
+            continue
+        if match_season not in seasons_seen:
+            ensure_season(conn, match_season)
+            seasons_seen.add(match_season)
+
         # Ensure competition exists
         comp_info = COMPETITIONS.get(comp_code)
         if comp_info:
-            ensure_competition(conn, comp_code, season, *comp_info)
+            ensure_competition(conn, comp_code, match_season, *comp_info)
         else:
-            ensure_competition(conn, comp_code, season)
+            ensure_competition(conn, comp_code, match_season)
 
         conn.execute(
             """INSERT INTO matches
@@ -53,9 +67,10 @@ def import_scoresheet(conn: sqlite3.Connection, src_path: str, season: str = "x2
                  score_a = excluded.score_a,
                  score_b = excluded.score_b,
                  has_scoresheet = 1,
+                 season = excluded.season,
                  scoresheet_match_id = excluded.scoresheet_match_id""",
             (
-                gamecode, comp_code, season,
+                gamecode, comp_code, match_season,
                 m["match_date"], m["match_time"], m["venue"],
                 m["team_a"], m["team_b"],
                 m["score_a"], m["score_b"],

@@ -43,6 +43,13 @@ jobs:
         continue-on-error: true
         run: python3 cli.py import shotchart --all
 
+      # A meccsek szezoncímkéje a dátumukból jön. Az importáló már így írja,
+      # de a korábban rosszul címkézett sorokat ez hozza helyre: 2026 őszén a
+      # hun3k és a huna_cup meccsei a tavalyi szezonba kerültek, amitől a
+      # kozgazkosar.hu idei dashboardja üres maradt. Idempotens.
+      - name: Szezoncímkék javítása
+        run: python3 cli.py fix-seasons --apply
+
       - name: Indexek levétele + VACUUM (GitHub 100MB limit alatt maradás)
         run: |
           BEFORE=$(stat -c%s mkosz_stats.sqlite)

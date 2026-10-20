@@ -93,3 +93,37 @@ def split_gamecode(gamecode: str) -> "tuple[str, str]":
         return parts[0], parts[1]
     # Fallback: próbáljunk ismert prefix-eket
     return gamecode, ""
+
+
+# A szezon július 1-jén fordul: a 2026-10-01-i meccs a 2026/27-es szezoné
+# ("x2627"), a 2026-03-01-i még a 2025/26-osé ("x2526"). Ez az MKOSZ saját
+# jelölése, ahogy az URL-ekben is szerepel.
+SEASON_START_MONTH = 7
+
+
+def season_for_date(match_date: Optional[str]) -> Optional[str]:
+    """A meccs dátumából ("ÉÉÉÉ-HH-NN") a szezon kódja, vagy None, ha nincs dátum.
+
+    Azért a dátumból számolunk, és nem konstansból: a konstanst szezonváltáskor
+    forgatni kell, és ha elmarad, az új meccsek csendben a tavalyi szezonba
+    kerülnek — pontosan ez történt 2026 őszén a hun3k és a huna_cup meccsekkel.
+    Egy régi PDF utólagos betöltése is a saját szezonjába kerül így, nem a mai
+    dátum szerintibe.
+    """
+    if not match_date or len(match_date) < 7:
+        return None
+    try:
+        year, month = int(match_date[:4]), int(match_date[5:7])
+    except ValueError:
+        return None
+    if not 1 <= month <= 12:
+        return None
+    start = year if month >= SEASON_START_MONTH else year - 1
+    return f"x{start % 100:02d}{(start + 1) % 100:02d}"
+
+
+def current_season(today: Optional[str] = None) -> str:
+    """A ma szerinti szezon kódja — az importok alapértelmezése."""
+    from datetime import date
+
+    return season_for_date(today or date.today().isoformat()) or "x2526"
