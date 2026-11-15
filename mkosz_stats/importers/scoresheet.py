@@ -109,7 +109,11 @@ def import_scoresheet(conn: sqlite3.Connection, src_path: str, season: str = Non
                  fg3_made = excluded.fg3_made,
                  ft_made = excluded.ft_made,
                  ft_attempted = excluded.ft_attempted,
-                 personal_fouls = excluded.personal_fouls""",
+                 personal_fouls = excluded.personal_fouls,
+                 -- PBP-sorra írt jegyzőkönyvi adat → 'merged', különben a PBP-import
+                 -- meccsenkénti takarítása (DELETE source='pbp') elvinné.
+                 source = CASE WHEN player_game_stats.source = 'pbp' THEN 'merged'
+                               ELSE player_game_stats.source END""",
             (
                 gamecode, s["team"], s["name"],
                 s["license_number"], s["jersey_number"],

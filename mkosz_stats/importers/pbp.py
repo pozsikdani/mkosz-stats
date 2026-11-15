@@ -113,6 +113,14 @@ def import_pbp(conn: sqlite3.Connection, src_path: str):
         "WHERE player_name IS NOT NULL"
     ).fetchall()
 
+    # Tiszta lap meccsenként: a korábbi PBP-futások sorai (régi névalakkal)
+    # különben megmaradnak, és ugyanaz a játékos kétszer számolódik.
+    # A 'merged' sorok maradnak (jegyzőkönyvi adat), a lenti párosítás frissíti őket.
+    for (gc,) in {(pr["match_id"],) for pr in player_rows}:
+        conn.execute(
+            "DELETE FROM player_game_stats WHERE gamecode=? AND source='pbp'", (gc,)
+        )
+
     stats_count = 0
     for pr in player_rows:
         gamecode = pr["match_id"]
@@ -122,7 +130,9 @@ def import_pbp(conn: sqlite3.Connection, src_path: str):
 
         # Match to scoresheet name if possible (handles truncated names + encoding artifacts)
         scoresheet_rows = conn.execute(
-            "SELECT player_name FROM player_game_stats WHERE gamecode=? AND team=? AND source='scoresheet'",
+            # 'merged' is: egy korábbi futás már párosította — különben a rövidített
+            # PBP-név (pl. PÁPAI MÁTÉ ↔ PÁPAI MÁTÉ BARNABÁS) új, duplikált sort kapna.
+            "SELECT player_name FROM player_game_stats WHERE gamecode=? AND team=? AND source IN ('scoresheet','merged')",
             (gamecode, team),
         ).fetchall()
         for sr in scoresheet_rows:
@@ -145,6 +155,9 @@ def import_pbp(conn: sqlite3.Connection, src_path: str):
                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pbp')
                ON CONFLICT(gamecode, team, player_name) DO UPDATE SET
                  is_starter = COALESCE(excluded.is_starter, player_game_stats.is_starter),
+                 -- A pont is a PBP-ből: a jegyzőkönyv-OCR pontja néha más játékosé
+                 -- (pl. hun2a_135829 Kucsora 23 vs hivatalos 12), a PBP egyezik a hivatalossal.
+                 points = excluded.points,
                  fg2_made = excluded.fg2_made,
                  fg2_attempted = excluded.fg2_attempted,
                  fg3_made = excluded.fg3_made,
