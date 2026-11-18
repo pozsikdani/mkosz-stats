@@ -1,8 +1,20 @@
 name: Napi import
 
+# Kétóránként, nem naponta egyszer (2026-11-18). A meccs estéjén felkerülő
+# jegyzőkönyv másfél nappal később ért a honlapra, mert a lánc három lépése
+# naponta egyszer futott — és a GitHub a kerek percre ütemezett futásokat
+# órákkal csúsztatja: ez a 6:30-as import mérve 13:44 és 16:23 között indult,
+# a dashboard regenje meg 04 és 06 között, vagyis AZ IMPORT ELŐTT. A honlap így
+# mindig az előző napi adatbázisból épült.
+#
+# A nehéz rész (import + VACUUM + 56 MB-os adatbázis commitja) nem futhat
+# kétóránként vakon: minden hozzányúló futás új blobot tesz a git-történetbe. A
+# „Van-e új adat" lépés ezért eldönti, kell-e egyáltalán — ha a scoresheet és a
+# PBP repó feje is ugyanaz, mint a legutóbbi importnál, és ma már volt teljes
+# futás, a job ott véget ér.
 on:
   schedule:
-    - cron: '30 6 * * *'  # 6:30 UTC — PBP (6:00 UTC) és scoresheet (22:00 előző nap) után, scout-web (7:30) előtt
+    - cron: '37 */2 * * *'
   workflow_dispatch: {}
 
 permissions:
@@ -29,18 +41,52 @@ jobs:
       - name: PBP repo klónozása
         run: git clone --depth 1 https://github.com/pozsikdani/mkosz-play-by-play.git /tmp/mkosz-pbp
 
+      # A tabella, a roster és a shotchart a webről jön, nem a két repóból, ezért
+      # naponta egyszer akkor is kell egy teljes futás, ha új meccs nincs.
+      - name: Van-e új adat
+        id: decide
+        run: |
+          sheet=$(git -C /tmp/mkosz-scoresheet rev-parse HEAD)
+          pbp=$(git -C /tmp/mkosz-pbp rev-parse HEAD)
+          today=$(date -u +%F)
+          prev_sheet=$(jq -r '.scoresheet // ""' ci_state.json 2>/dev/null || true)
+          prev_pbp=$(jq -r '.pbp // ""' ci_state.json 2>/dev/null || true)
+          prev_full=$(jq -r '.last_full // ""' ci_state.json 2>/dev/null || true)
+          run=false
+          why=""
+          if [ "$GITHUB_EVENT_NAME" != "schedule" ]; then
+            run=true; why="kézi indítás"
+          elif [ "$sheet" != "$prev_sheet" ]; then
+            run=true; why="új jegyzőkönyv-adat"
+          elif [ "$pbp" != "$prev_pbp" ]; then
+            run=true; why="új play-by-play adat"
+          elif [ "$prev_full" != "$today" ]; then
+            run=true; why="napi teljes futás (tabella, roster, shotchart)"
+          else
+            why="nincs új adat, és ma már volt teljes futás"
+          fi
+          echo "run=$run" >> "$GITHUB_OUTPUT"
+          echo "sheet=$sheet" >> "$GITHUB_OUTPUT"
+          echo "pbp=$pbp" >> "$GITHUB_OUTPUT"
+          echo "today=$today" >> "$GITHUB_OUTPUT"
+          echo "### Import: $why" >> "$GITHUB_STEP_SUMMARY"
+
       - name: Scoresheet import
+        if: steps.decide.outputs.run == 'true'
         run: python3 cli.py import scoresheet /tmp/mkosz-scoresheet/scoresheet.sqlite
 
       - name: PBP import
+        if: steps.decide.outputs.run == 'true'
         run: python3 cli.py import pbp /tmp/mkosz-pbp/pbp.sqlite
 
       - name: Web import (standings + rosters)
+        if: steps.decide.outputs.run == 'true'
         run: python3 cli.py import web
 
       - name: Shotchart import (mkosz.hu/ajax/film.php)
         # API néha ConnectTimeout-tal hibázik — ne álljon le miatta a pipeline.
         continue-on-error: true
+        if: steps.decide.outputs.run == 'true'
         run: python3 cli.py import shotchart --all
 
       # A meccsek szezoncímkéje a dátumukból jön. Az importáló már így írja,
@@ -48,9 +94,11 @@ jobs:
       # hun3k és a huna_cup meccsei a tavalyi szezonba kerültek, amitől a
       # kozgazkosar.hu idei dashboardja üres maradt. Idempotens.
       - name: Szezoncímkék javítása
+        if: steps.decide.outputs.run == 'true'
         run: python3 cli.py fix-seasons --apply
 
       - name: Indexek levétele + VACUUM (GitHub 100MB limit alatt maradás)
+        if: steps.decide.outputs.run == 'true'
         run: |
           BEFORE=$(stat -c%s mkosz_stats.sqlite)
           # Custom indexek ~21 MB-ot tesznek ki. A consumer (scout-web)
@@ -75,11 +123,20 @@ jobs:
           AFTER=$(stat -c%s mkosz_stats.sqlite)
           echo "DB size: $(echo "scale=1; $BEFORE/1048576" | bc) MB → $(echo "scale=1; $AFTER/1048576" | bc) MB"
 
+      # A ci_state.json az adatbázissal egy commitban megy: ebből tudja a
+      # következő futás, hogy a két forrásrepó feje változott-e, és hogy ma volt-e
+      # már teljes futás. Akkor is írjuk, ha az adatbázis nem változott —
+      # különben a napi teljes futás minden kétórás futásnál újraindulna.
       - name: Commit és push ha változott
+        if: steps.decide.outputs.run == 'true'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add mkosz_stats.sqlite
+          printf '{\n  "scoresheet": "%s",\n  "pbp": "%s",\n  "last_full": "%s"\n}\n' \
+            "${{ steps.decide.outputs.sheet }}" \
+            "${{ steps.decide.outputs.pbp }}" \
+            "${{ steps.decide.outputs.today }}" > ci_state.json
+          git add mkosz_stats.sqlite ci_state.json
           git diff --staged --quiet || (
             git commit -m "Napi import (auto): $(date +%Y-%m-%d)" &&
             git push
