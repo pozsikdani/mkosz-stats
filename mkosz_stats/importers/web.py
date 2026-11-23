@@ -245,13 +245,27 @@ def import_web(conn, comp=None, season="x2526"):
 
         time.sleep(API_DELAY)
 
-        # 2. Rosters (from standings team URLs)
+        # A roster és a results ág is a tabella sorait járja be. Ez a lekérdezés
+        # a try-okon kívül van: ha elhasal, mindkét ág tudatosan kimarad, nem
+        # pedig egy félreérthető "standings_rows referenced before assignment"
+        # hibával áll meg a results.
+        standings_rows = []
         try:
-            roster_count = 0
             standings_rows = conn.execute(
                 "SELECT team_name, team_page_url, team_id FROM standings WHERE comp_code=? AND season=?",
                 (c, season),
             ).fetchall()
+        except Exception as e:
+            print(f"  Tabella-sorok olvasasa sikertelen: {e}")
+
+        if not standings_rows:
+            print(f"  Rosters: kihagyva (nincs tabella-adat)")
+            print(f"  Match results: kihagyva (nincs tabella-adat)")
+            continue
+
+        # 2. Rosters (from standings team URLs)
+        try:
+            roster_count = 0
             for row in standings_rows:
                 team_name, team_url, team_id = row["team_name"], row["team_page_url"], row["team_id"]
                 if not team_url:
