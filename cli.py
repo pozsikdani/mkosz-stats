@@ -8,7 +8,7 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from config import DB_PATH, SCORESHEET_DB, PBP_DB
-from mkosz_stats.db import init_db, get_connection, db_status
+from mkosz_stats.db import init_db, get_connection, ensure_schema, db_status
 from mkosz_stats.normalize import current_season, season_for_date
 from mkosz_stats.team_resolver import ensure_competition
 from config import COMPETITIONS
@@ -24,6 +24,9 @@ def cmd_import(args):
     """Import forrásokból."""
     db = args.db or DB_PATH
     conn = get_connection(db)
+    # A séma a sima importnál is kell: a meglévő adatbázisban hiányozhat egy
+    # később felvett tábla (a web import évek óta ezen hasalt el).
+    ensure_schema(conn)
 
     if args.source == "scoresheet":
         from mkosz_stats.importers.scoresheet import import_scoresheet

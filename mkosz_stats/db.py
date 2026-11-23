@@ -5,7 +5,7 @@ from pathlib import Path
 
 SCHEMA_VERSION = 1
 
-SCHEMA_SQL = """
+SCHEMA_TABLES_SQL = """
 -- ============================================================
 -- LOOKUP / DIMENSION TABLES
 -- ============================================================
@@ -282,9 +282,21 @@ CREATE TABLE IF NOT EXISTS web_match_results (
 );
 
 -- ============================================================
--- INDEXES
+-- META
 -- ============================================================
 
+CREATE TABLE IF NOT EXISTS meta (
+    key   TEXT PRIMARY KEY,
+    value TEXT
+);
+"""
+
+# Az indexeket szándékosan nem a táblákkal együtt tartjuk: a napi CI a commit
+# előtt leveszi őket (~21 MB a ~57 MB-os fájlból), és a fogyasztó repó
+# (mkosz-scout-web) klónozás után építi újra. Így az ensure_schema() csak a
+# táblákat garantálja, és egy sima import nem hizlalja vissza a
+# verziókövetett adatbázist.
+SCHEMA_INDEXES_SQL = """
 CREATE INDEX IF NOT EXISTS idx_matches_comp ON matches(comp_code, season);
 CREATE INDEX IF NOT EXISTS idx_matches_date ON matches(match_date);
 CREATE INDEX IF NOT EXISTS idx_pgs_gamecode ON player_game_stats(gamecode);
@@ -299,16 +311,10 @@ CREATE INDEX IF NOT EXISTS idx_subs_gamecode ON substitutions(gamecode);
 CREATE INDEX IF NOT EXISTS idx_player_names_variant ON player_names(name_variant);
 CREATE INDEX IF NOT EXISTS idx_team_aliases_team ON team_aliases(team_id);
 CREATE INDEX IF NOT EXISTS idx_rosters_team ON rosters(team_id, season);
-
--- ============================================================
--- META
--- ============================================================
-
-CREATE TABLE IF NOT EXISTS meta (
-    key   TEXT PRIMARY KEY,
-    value TEXT
-);
 """
+
+# Friss adatbázis: táblák + indexek.
+SCHEMA_SQL = SCHEMA_TABLES_SQL + SCHEMA_INDEXES_SQL
 
 
 def get_connection(db_path: str, foreign_keys: bool = False) -> sqlite3.Connection:
@@ -323,6 +329,41 @@ def get_connection(db_path: str, foreign_keys: bool = False) -> sqlite3.Connecti
         conn.execute("PRAGMA foreign_keys=ON")
     conn.row_factory = sqlite3.Row
     return conn
+
+
+def _table_names(conn: sqlite3.Connection) -> set:
+    """A meglévő táblák nevei (view-k és indexek nélkül)."""
+    return {
+        r[0]
+        for r in conn.execute(
+            "SELECT name FROM sqlite_master WHERE type = 'table'"
+        ).fetchall()
+    }
+
+
+def ensure_schema(conn: sqlite3.Connection, verbose: bool = True) -> list:
+    """A séma táblái meglévő adatbázison is létrejönnek.
+
+    Az init_db() csak az adatbázis első létrehozásakor futott le, az importok
+    pedig puszta get_connection()-nal nyitották a kapcsolatot — így a sémához
+    később hozzáadott táblák (standings, player_roster_meta,
+    web_match_results) a már commitolt mkosz_stats.sqlite-ból hiányoztak, és a
+    napi web import minden versenynél elbukott rajtuk. Idempotens: minden DDL
+    IF NOT EXISTS.
+
+    Indexeket szándékosan nem hoz létre — lásd SCHEMA_INDEXES_SQL.
+    """
+    before = _table_names(conn)
+    conn.executescript(SCHEMA_TABLES_SQL)
+    conn.execute(
+        "INSERT OR IGNORE INTO meta (key, value) VALUES ('schema_version', ?)",
+        (str(SCHEMA_VERSION),),
+    )
+    conn.commit()
+    created = sorted(_table_names(conn) - before)
+    if created and verbose:
+        print(f"Séma: {len(created)} hiányzó tábla létrehozva: {', '.join(created)}")
+    return created
 
 
 def init_db(db_path: str) -> sqlite3.Connection:
