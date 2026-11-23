@@ -249,13 +249,28 @@ def import_scoresheet(conn: sqlite3.Connection, src_path: str, season: str = Non
         "score_a, score_b FROM scoring_events"
     ).fetchall()
 
+    # A meccs régi sorait le kell CSERÉLNI, nem kiegészíteni. Újraolvasás
+    # után az event_seq mást jelent, és a UNIQUE(gamecode, event_seq) miatt az
+    # INSERT OR IGNORE a RÉGI sort hagyta bent, az újat eldobta — a javítás
+    # így nem jutott el a kosarak listájáig. A hun3k_141651-en emiatt maradt
+    # bent a már javított 73→76 "tripla", a Közgáz összege 108 lett a 105
+    # helyett, és rossz lett a 3. negyed MVP-je. Ahol az új kiolvasás több
+    # eseményt adott, a többlet a régi sorok MELLÉ került. (Andris, 2026-11-22.)
+    erintett_ev = {
+        gamecode_map[e["match_id"]]
+        for e in events
+        if gamecode_map.get(e["match_id"])
+    }
+    for gc in erintett_ev:
+        conn.execute("DELETE FROM scoring_events WHERE gamecode = ?", (gc,))
+
     ev_count = 0
     for e in events:
         gamecode = gamecode_map.get(e["match_id"])
         if not gamecode:
             continue
 
-        conn.execute(
+        cur = conn.execute(
             """INSERT OR IGNORE INTO scoring_events
                (gamecode, event_seq, quarter, minute, team,
                 jersey_number, license_number, points, shot_type, made,
@@ -268,27 +283,40 @@ def import_scoresheet(conn: sqlite3.Connection, src_path: str, season: str = Non
                 e["score_a"], e["score_b"],
             ),
         )
-        ev_count += 1
+        ev_count += cur.rowcount
 
     print(f"  ✅ {ev_count} scoring_events sor importálva")
+    if ev_count != len(events):
+        print(f"  ⚠️  {len(events) - ev_count} esemény-sor nem került be "
+              f"(ütköző gamecode + event_seq)")
 
     # ── 4. Import quarter_scores ───────────────────────────────────
     qs = src.execute(
         "SELECT match_id, quarter, score_a, score_b FROM quarter_scores"
     ).fetchall()
 
+    # Ugyanaz, mint a scoring_events-nél: a negyedes eredményt cserélni kell,
+    # különben az első beírás ragad bent örökre.
+    erintett_qs = {
+        gamecode_map[q["match_id"]]
+        for q in qs
+        if gamecode_map.get(q["match_id"])
+    }
+    for gc in erintett_qs:
+        conn.execute("DELETE FROM quarter_scores WHERE gamecode = ?", (gc,))
+
     qs_count = 0
     for q in qs:
         gamecode = gamecode_map.get(q["match_id"])
         if not gamecode:
             continue
-        conn.execute(
+        cur = conn.execute(
             """INSERT OR IGNORE INTO quarter_scores
                (gamecode, quarter, score_a, score_b)
                VALUES (?, ?, ?, ?)""",
             (gamecode, q["quarter"], q["score_a"], q["score_b"]),
         )
-        qs_count += 1
+        qs_count += cur.rowcount
 
     print(f"  ✅ {qs_count} quarter_scores sor importálva")
 
